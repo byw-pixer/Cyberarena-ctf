@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WEB-02 — демонстрационный ресурс</title>
+  <style>
+    body{font-family:system-ui; background:#0b1522; color:#e7f0f5; max-width:660px; margin:12vh auto;padding:24px}
+    h1 {color:#c5f46d} 
+    p {line-height:1.8; color:#9aafbf} 
+    code {color:#c4eddf} 
+  </style>
+</head>
+<body>
+  <p>CYBERARENA / WEB-02</p>
+  <h1>Демонстрационная страница</h1>
+  <p>Этот ресурс нужен для проверки перехода из дизайн-макета. Здесь нет настоящей уязвимости и не хранится CTF-флаг.</p>
+  <p>В рабочей версии вместо него будет авторская задача на анализ <code>HTML/JavaScript</code> или HTTP-ответа.</p>
+</body>
+</html>

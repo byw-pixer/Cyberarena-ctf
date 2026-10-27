@@ -1,0 +1,90 @@
+# CyberArena: запуск одной командой
+#   cp .env.example .env   (и поменять значения)
+#   docker compose up -d --build
+# Сайт: http://localhost:8080
+
+name: cyberarena
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # --- Единственная точка входа. Слушает только 127.0.0.1 ---
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./app/static:/usr/share/nginx/static:ro   # /static/: стили и файлы заданий
+    networks: [app-net, lab-net]
+    depends_on:
+      app:
+        condition: service_healthy   # лабораторию НЕ ждём: платформа должна жить без неё
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    mem_limit: 64m
+    restart: unless-stopped
+    logging: *default-logging
+
+  # --- Платформа (FastAPI + SQLite) ---
+  app:
+    build: ./app
+    environment:                    # только то, что нужно платформе (флагов заданий здесь нет)
+      DATABASE_URL: sqlite:////data/cyberarena.db
+      SECRET_KEY: "${SECRET_KEY:?задайте SECRET_KEY в .env}"
+      ADMIN_USERNAME: "${ADMIN_USERNAME:?задайте ADMIN_USERNAME в .env}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:?задайте ADMIN_PASSWORD в .env}"
+    volumes:
+      - db_data:/data               # база переживает restart / down
+    networks: [app-net]             # лаборатория сюда НЕ подключена
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    mem_limit: 512m
+    cpus: 1.0
+    restart: unless-stopped
+    logging: *default-logging
+
+  # --- Уязвимая учебная лаборатория WEB-01 ---
+  lab-web:
+    build: ./lab
+    networks: [lab-net]             # только lab-net, а она internal (без интернета)
+    expose: ["5000"]
+    environment:                    # флаг WEB-01 доступен только лаборатории
+      WEB01_FLAG: "${WEB01_FLAG:?задайте WEB01_FLAG в .env}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+    # НЕТ: privileged, network_mode: host, монтирования docker.sock, доступа к app-net и volume db_data
+
+networks:
+  app-net: {}                       # nginx <-> app
+  lab-net:
+    internal: true                  # nginx <-> lab-web, без выхода в интернет
+
+volumes:
+  db_data: {}

@@ -1,0 +1,32 @@
+[
+  {
+    "title": "WEB-01 Школьный портал",
+    "category": "Web",
+    "difficulty": "easy",
+    "description": "Школьный портал заметок. Вы вошли как student3 и видите свою заметку. Разработчики говорят, что оставили на портале закрытую тестовую страницу с секретом. Найдите её и получите флаг. Работайте только с лабораторией /lab/.",
+    "points": 100,
+    "resource_url": "/lab/",
+    "is_published": true,
+    "flag_env": "WEB01_FLAG"
+  },
+  {
+    "title": "WEB-02 Сейф на JavaScript",
+    "category": "Web",
+    "difficulty": "easy",
+    "description": "Страница просит код доступа, а проверка выполняется прямо в браузере. Изучите страницу и подключённые к ней файлы, найдите ожидаемый код. Он и есть флаг.",
+    "points": 150,
+    "resource_url": "/static/tasks/web02/index.html",
+    "is_published": true,
+    "flag_env": "WEB02_FLAG"
+  },
+  {
+    "title": "CRYPTO-01 Перехваченная записка",
+    "category": "Crypto",
+    "difficulty": "medium",
+    "description": "Скачайте шифротекст и расшифруйте записку. Подсказка: шифр использует повторяющийся ключ, а ключ это название нашей платформы на английском языке строчными буквами. Знаки препинания не шифруются.",
+    "points": 150,
+    "resource_url": "/static/tasks/crypto01/cipher.txt",
+    "is_published": true,
+    "flag_env": "CRYPTO01_FLAG"
+  }
+]

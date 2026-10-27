@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · CYBERARENA{% endblock %}
+{% block crumb %}АККАУНТ{% endblock %}
+{% block page_title %}{{ heading }}{% endblock %}
+{% block content %}
+<div class="auth-shell">
+  <h2>{{ heading }}</h2>
+  <p>{% if action == '/register' %}Создайте аккаунт участника.{% else %}Войдите, чтобы решать задания.{% endif %}</p>
+  <form class="admin-form" action="{{ action }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <div class="form-control"><label for="username">Логин</label><input class="field" id="username" name="username" required minlength="3" maxlength="40" autocomplete="username" placeholder="cyber_player"></div>
+    <div class="form-control"><label for="password">Пароль</label><input class="field" id="password" type="password" name="password" required minlength="10" autocomplete="{% if action == '/register' %}new-password{% else %}current-password{% endif %}"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:7px" type="submit">{{ heading }}</button>
+  </form>
+  {% if action == '/register' %}
+  <div class="auth-info">Логин: 3-40 символов (буквы, цифры, подчёркивание). Пароль: от 10 символов. Уже есть аккаунт? <a href="/login" style="color:var(--acid)">Войти</a></div>
+  {% else %}
+  <div class="auth-info">Нет аккаунта? <a href="/register" style="color:var(--acid)">Зарегистрироваться</a></div>
+  {% endif %}
+</div>
+{% endblock %}

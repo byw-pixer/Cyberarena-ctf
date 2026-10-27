@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set active = 'profile' %}
+{% block title %}Профиль · CYBERARENA{% endblock %}
+{% block crumb %}ПЛАТФОРМА / ПРОФИЛЬ{% endblock %}
+{% block page_title %}Мой профиль{% endblock %}
+{% block content %}
+<div class="page-intro">
+  <div>
+    <div class="eyebrow" style="color:var(--acid);margin-bottom:10px">PLAYER SPACE</div>
+    <h1>Мой профиль<span style="color:var(--acid)">.</span></h1>
+    <p>История решений и текущие достижения.</p>
+  </div>
+</div>
+<div class="profile-grid">
+  <div class="profile-card">
+    <div class="profile-cover"></div>
+    <div class="profile-inner">
+      <div class="big-avatar">{{ user.username[0]|upper }}</div>
+      <div class="profile-name">{{ user.username }}</div>
+      <div class="profile-role">{% if user.is_admin %}Преподаватель{% else %}Участник{% endif %}</div>
+      <div class="profile-facts">
+        <div class="profile-fact"><span>Набрано баллов</span><strong>{{ score }}</strong></div>
+        <div class="profile-fact"><span>Решено заданий</span><strong>{{ solved|length }}</strong></div>
+      </div>
+      <a class="btn btn-primary" href="/challenges" style="margin-top:24px;width:100%">Перейти к заданиям <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">История решений <span style="color:var(--muted);font-size:10px">{{ solved|length }} записей</span></div>
+    <table class="mini-table">
+      <thead><tr><th>ЗАДАНИЕ</th><th>ДАТА (UTC)</th><th>БАЛЛЫ</th></tr></thead>
+      <tbody>
+        {% for s in solved %}
+        <tr><td>{{ s.title }}</td><td>{% if s.solved_at is string %}{{ s.solved_at }}{% else %}{{ s.solved_at.strftime('%d.%m %H:%M') }}{% endif %}</td><td>+{{ s.points }}</td></tr>
+        {% else %}
+        <tr><td colspan="3" class="empty-row">Пока нет решённых задач. Первый флаг ждёт вас!</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
