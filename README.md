@@ -193,7 +193,6 @@ pytest -q                                                       # тесты bac
 ├── tasks/                  генератор заданий (build_tasks.py) и описание
 ├── tests/                  автотесты и чек-лист приёмки
 ├── teacher/                материалы преподавателя (решения заданий), студентам не показывать
-└── docs/                   INFRASTRUCTURE.md, BACKEND_NOTES.md, DESIGN_MOCKUP.md
 ```
 
 ## Смена флагов перед турниром
