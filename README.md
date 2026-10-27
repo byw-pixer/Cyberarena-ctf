@@ -224,7 +224,3 @@ docker compose up -d --build
 | Ошибка 429 при входе или отправке флага | сработало ограничение частоты, подождите около минуты |
 | `/lab/` показывает 503 | контейнер лаборатории остановлен: `docker compose start lab-web`, причина в `docker compose logs lab-web` |
 | `Expected a string, but found a redirection` в fish | команда написана для bash; используйте готовые скрипты из `scripts/` |
-
-Подробнее об инфраструктуре: [docs/INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md).
-Замечания по backend: [docs/BACKEND_NOTES.md](docs/BACKEND_NOTES.md).
-Первоначальный дизайн-макет: [docs/DESIGN_MOCKUP.md](docs/DESIGN_MOCKUP.md).
