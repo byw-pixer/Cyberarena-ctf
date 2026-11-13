@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% set active = 'challenges' %}
+{% block title %}Задания · CYBERARENA{% endblock %}
+{% block crumb %}ПЛАТФОРМА / ЗАДАНИЯ{% endblock %}
+{% block page_title %}Каталог заданий{% endblock %}
+{% block content %}
+<div class="page-intro">
+  <div>
+    <div class="eyebrow" style="color:var(--acid);margin-bottom:10px">CAPTURE THE FLAG</div>
+    <h1>Каталог заданий<span style="color:var(--acid)">.</span></h1>
+    <p>Отображаются только опубликованные задания.</p>
+  </div>
+  <div class="intro-detail">Заданий: {{ challenges|length }} · Решено: {{ solved_ids|length }}</div>
+</div>
+<div class="catalog-grid">
+  {% for c in challenges %}
+  {% set solved = c.id in solved_ids %}
+  <article class="catalog-card">
+    <div class="catalog-top">
+      <div class="catalog-icon{% if c.category|lower == 'crypto' %} crypto{% endif %}"><svg class="icon icon-lg" aria-hidden="true"><use href="#{{ 'i-key' if c.category|lower == 'crypto' else 'i-code' }}"/></svg></div>
+      <div class="status-dot {{ 'solved' if solved else 'published' }}">{{ 'Решено' if solved else 'Доступно' }}</div>
+    </div>
+    <div class="catalog-id" style="margin-top:16px">№{{ c.id }} / {{ c.category|upper }} / {{ c.difficulty|upper }}</div>
+    <h3>{{ c.title }}</h3>
+    <p>{{ c.description|truncate(110) }}</p>
+    <div class="catalog-bottom">
+      <span class="point-display">{{ c.points }} <small>PTS</small></span>
+      <a class="btn btn-primary" href="/challenges/{{ c.id }}">Открыть <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    </div>
+  </article>
+  {% else %}
+  <div class="empty-state" style="grid-column:1/-1">Опубликованных заданий пока нет.</div>
+  {% endfor %}
+</div>
+{% endblock %}

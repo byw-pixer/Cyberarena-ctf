@@ -1,0 +1,95 @@
+# CyberArena: запуск одной командой, без .env и без скриптов
+#   docker compose up -d --build
+# Сайт: http://localhost:8080
+#
+# Все значения ниже имеют безопасные значения по умолчанию. Чтобы задать свои, создайте файл .env
+# (пример: .env.example). Пароль администратора, если он не задан, создаётся случайным при первом
+# запуске и печатается в лог: docker compose logs app
+
+name: cyberarena
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # --- Единственная точка входа. Слушает только 127.0.0.1 ---
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks: [app-net, lab-net]
+    depends_on:
+      app:
+        condition: service_healthy   # лабораторию НЕ ждём: платформа должна жить без неё
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    mem_limit: 64m
+    restart: unless-stopped
+    logging: *default-logging
+
+  # --- Платформа (FastAPI + SQLite). Сама создаёт базу, администратора и задания ---
+  app:
+    build: ./app
+    environment:
+      DATABASE_URL: sqlite:////data/cyberarena.db
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-teacher}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"     # пусто = случайный пароль при первом запуске (в логе)
+      SECRET_KEY: "${SECRET_KEY:-}"             # пусто = случайный ключ, сохраняется в томе /data
+      WEB01_FLAG: "${WEB01_FLAG:-}"             # пусто = демонстрационный флаг
+      WEB02_FLAG: "${WEB02_FLAG:-}"
+      CRYPTO01_FLAG: "${CRYPTO01_FLAG:-}"
+    volumes:
+      - db_data:/data               # база и ключ переживают restart и down (но не down -v)
+    networks: [app-net]             # лаборатория сюда НЕ подключена
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    mem_limit: 512m
+    cpus: 1.0
+    restart: unless-stopped
+    logging: *default-logging
+
+  # --- Уязвимая учебная лаборатория WEB-01 (изолирована) ---
+  lab-web:
+    build: ./lab
+    networks: [lab-net]             # только lab-net, а она internal (без интернета)
+    expose: ["5000"]
+    environment:
+      WEB01_FLAG: "${WEB01_FLAG:-}" # единственная переменная лаборатории (пусто = демонстрационный флаг)
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+    # НЕТ: privileged, network_mode: host, монтирования docker.sock, сети app-net и тома db_data
+
+networks:
+  app-net: {}                       # nginx <-> app
+  lab-net:
+    internal: true                  # nginx <-> lab-web, без выхода в интернет
+
+volumes:
+  db_data: {}

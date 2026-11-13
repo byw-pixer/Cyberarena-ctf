@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% set active = 'challenges' %}
+{% block title %}{{ challenge.title }} · CYBERARENA{% endblock %}
+{% block crumb %}ПЛАТФОРМА / ЗАДАНИЯ{% endblock %}
+{% block page_title %}{{ challenge.title }}{% endblock %}
+{% block content %}
+<a class="detail-back" href="/challenges"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-back"/></svg> Назад к каталогу</a>
+<div class="detail-head">
+  <div>
+    <div class="eyebrow" style="color:var(--acid)">№{{ challenge.id }} / {{ challenge.category|upper }}</div>
+    <h1>{{ challenge.title }}</h1>
+    <span class="tiny-tag green">{{ challenge.difficulty|upper }}</span><span class="tiny-tag">CTF&#123;...&#125;</span>
+  </div>
+  <div class="detail-points">{{ challenge.points }}<span>БАЛЛОВ</span></div>
+</div>
+<div class="detail-grid">
+  <div class="panel">
+    <h3>Условие задания</h3>
+    <div class="detail-text" style="white-space:pre-wrap">{{ challenge.description }}</div>
+    {% if challenge.resource_url and challenge.resource_url.startswith('/') %}
+    <div class="resource-card">
+      <div><div class="resource-label">РЕСУРС ЗАДАНИЯ</div><div class="resource-name">{{ challenge.resource_url }}</div></div>
+      <a class="btn btn-quiet" href="{{ challenge.resource_url }}" target="_blank" rel="noopener">Открыть <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    </div>
+    {% endif %}
+  </div>
+  <aside>
+    <div class="panel">
+      <div class="panel-title">Отправить флаг <svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg></div>
+      {% if message %}<div class="notice{% if not message.startswith('Верно') %} bad{% endif %}">{{ message }}</div>{% endif %}
+      <form class="flag-form" method="post" action="/challenges/{{ challenge.id }}/submit">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <label class="field-label" for="flag">НАЙДЕННЫЙ ФЛАГ</label>
+        <input class="field" id="flag" name="flag" placeholder="CTF{your_flag_here}" autocomplete="off" spellcheck="false" maxlength="165" required>
+        <button class="btn btn-primary" type="submit">Проверить флаг <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+        <div class="hint">Баллы начисляются один раз, за первое верное решение. Между попытками нужно подождать 3 секунды.</div>
+      </form>
+    </div>
+  </aside>
+</div>
+{% endblock %}

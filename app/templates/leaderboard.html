@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% set active = 'leaderboard' %}
+{% block title %}Рейтинг · CYBERARENA{% endblock %}
+{% block crumb %}ПЛАТФОРМА / РЕЙТИНГ{% endblock %}
+{% block page_title %}Таблица лидеров{% endblock %}
+{% block content %}
+<div class="page-intro">
+  <div>
+    <div class="eyebrow" style="color:var(--acid);margin-bottom:10px">SCOREBOARD</div>
+    <h1>Таблица лидеров<span style="color:var(--acid)">.</span></h1>
+    <p>Выше тот, кто набрал больше баллов. При равенстве побеждает более раннее последнее результативное решение.</p>
+  </div>
+  <div class="intro-detail">Баллы ↓, время ↑</div>
+</div>
+<div class="leader-panel">
+  <div class="leader-head"><span>МЕСТО</span><span>УЧАСТНИК</span><span>БАЛЛЫ</span><span>ПОСЛЕДНЕЕ РЕШЕНИЕ</span></div>
+  {% for s in scores %}
+  {% set me = user and s.username == user.username %}
+  <div class="leader-row{% if me %} self{% endif %}">
+    <span style="font-weight:850;color:{% if loop.index <= 3 and s.score > 0 %}var(--acid){% else %}#9cabbd{% endif %}">{% if loop.index <= 3 and s.score > 0 %}{{ ['🥇', '🥈', '🥉'][loop.index0] }}{% else %}#{{ loop.index }}{% endif %}</span>
+    <span class="leader-user"><span class="rank-avatar">{{ s.username[0]|upper }}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.username }}{% if me %} <span class="tiny-tag green" style="margin-left:6px">ВЫ</span>{% endif %}</span></span>
+    <strong class="leader-score">{{ s.score }}</strong>
+    <span class="leader-time">{% if s.last_solve %}{% if s.last_solve is string %}{{ s.last_solve }}{% else %}{{ s.last_solve.strftime('%d.%m %H:%M') }}{% endif %}{% else %}—{% endif %}</span>
+  </div>
+  {% else %}
+  <div class="empty-row">Участников пока нет.</div>
+  {% endfor %}
+</div>
+<div class="aside-note">Время указано в UTC.</div>
+{% endblock %}

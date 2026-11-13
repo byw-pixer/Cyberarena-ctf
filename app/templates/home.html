@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% set active = 'home' %}
+{% block title %}CYBERARENA{% endblock %}
+{% block crumb %}ПЛАТФОРМА / ОБЗОР{% endblock %}
+{% block page_title %}Главная панель{% endblock %}
+{% block content %}
+<div class="page-intro">
+  <div>
+    <div class="eyebrow" style="color:var(--acid);margin-bottom:10px">LOCAL CTF PLATFORM</div>
+    <h1>CYBERARENA<span style="color:var(--acid)">.</span></h1>
+    <p>Локальная учебная CTF-платформа: найдите флаг формата CTF&#123;...&#125; и получите баллы.</p>
+  </div>
+  <div class="intro-detail">Опубликовано заданий: {{ challenges|length }}</div>
+</div>
+<div class="panel">
+  <div class="panel-title"><span>Как это работает</span></div>
+  <div class="detail-text">Зарегистрируйтесь, откройте задание из каталога, найдите флаг и отправьте его. За первое верное решение начисляются баллы, итог виден в рейтинге.</div>
+  <div style="display:flex;gap:10px;margin-top:22px;flex-wrap:wrap">
+    {% if user %}
+    <a class="btn btn-primary" href="/challenges">Перейти к заданиям <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    {% else %}
+    <a class="btn btn-primary" href="/register">Регистрация <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    <a class="btn btn-quiet" href="/login">Вход</a>
+    {% endif %}
+    <a class="btn btn-quiet" href="/leaderboard">Рейтинг</a>
+  </div>
+</div>
+{% endblock %}
