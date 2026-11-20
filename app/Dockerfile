@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Непривилегированный пользователь и каталог под SQLite.
 # Именованный volume при первом создании наследует владельца этого каталога.
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin app \
- && mkdir /data && chown app:app /data
+ && mkdir /data /lab-flags && chown app:app /data /lab-flags
 
 WORKDIR /app
 COPY requirements.txt .

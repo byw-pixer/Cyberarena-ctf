@@ -14,16 +14,15 @@
 """
 import html
 import os
-import sys
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 CURRENT_USER = {"id": 3, "name": "student3"}
-DEFAULT_FLAG = "CTF{idor_open_door_42}"   # демонстрационный; тот же флаг по умолчанию в task_files.py
 
 
 def get_flag():
-    return os.environ.get("WEB01_FLAG") or DEFAULT_FLAG
+    return Path(os.environ.get("WEB01_FLAG_FILE", "/lab-flags/web01.flag")).read_text(encoding="utf-8").strip()
 
 
 def get_notes():
@@ -31,7 +30,7 @@ def get_notes():
         1: {
             "owner": "admin",
             "title": "ТЕСТОВАЯ СТРАНИЦА (удалить перед релизом)",
-            "body": "Служебная проверка. Секрет: " + get_flag(),
+            "body": "Служебная проверка. Секрет: ",
         },
         2: {
             "owner": "teacher",
@@ -76,16 +75,24 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     def _error(self, status, text):
         body = ("<h1>%s</h1><p><a href=\"./\">На главную</a></p>" % html.escape(text))
         self._send(status, render("Ошибка", body))
 
+    def do_HEAD(self):
+        self.do_GET()
+
     def do_GET(self):
         url = urlparse(self.path)
         if url.path == "/health":
-            self._send(200, b"ok", "text/plain")
+            try:
+                available = bool(get_flag())
+            except OSError:
+                available = False
+            self._send(200 if available else 503, b"ok" if available else b"unavailable", "text/plain")
         elif url.path == "/":
             self._home()
         elif url.path == "/notes":
@@ -105,13 +112,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def _note(self, query):
         raw = (query.get("id") or [""])[0]
-        if not raw.isdigit():
+        if not raw.isascii() or not raw.isdecimal() or len(raw) > 16:
             return self._error(400, "Некорректный номер заметки")
-        note = get_notes().get(int(raw))
+        note_id = int(raw)
+        note = get_notes().get(note_id)
         if note is None:
             return self._error(404, "Заметка не найдена")
         # НАМЕРЕННАЯ ОШИБКА: нет проверки note["owner"] == CURRENT_USER["name"].
         # Исправление: вернуть 403, если заметка принадлежит другому пользователю.
+        if note_id == 1:
+            try:
+                note["body"] += get_flag()
+            except OSError:
+                return self._error(503, "Материалы лаборатории пока недоступны")
         body = (
             "<h1>%s</h1><div class=\"card\"><p>%s</p>"
             "<p class=\"muted\">Автор: %s · заметка №%s</p></div>"
@@ -127,6 +140,4 @@ def make_server(host="0.0.0.0", port=5000):
 
 
 if __name__ == "__main__":
-    if get_flag() == DEFAULT_FLAG:
-        print("WEB01_FLAG не задан: используется демонстрационный флаг", file=sys.stderr)
     make_server().serve_forever()

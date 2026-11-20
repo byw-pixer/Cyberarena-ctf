@@ -27,6 +27,7 @@
   <aside>
     <div class="panel">
       <div class="panel-title">Отправить флаг <svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg></div>
+      {% if error %}<div class="notice bad" role="alert">{{ error }}</div>{% endif %}
       {% if message %}<div class="notice{% if not message.startswith('Верно') %} bad{% endif %}">{{ message }}</div>{% endif %}
       <form class="flag-form" method="post" action="/challenges/{{ challenge.id }}/submit">
         <input type="hidden" name="csrf_token" value="{{ csrf }}">

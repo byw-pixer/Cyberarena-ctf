@@ -43,3 +43,18 @@ class Solve(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), primary_key=True)
     challenge_id: Mapped[int] = mapped_column(ForeignKey('challenges.id'), primary_key=True)
     solved_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class BuiltinChallenge(Base):
+    __tablename__ = 'builtin_challenges'
+    code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    challenge_id: Mapped[int] = mapped_column(ForeignKey('challenges.id'), unique=True)
+    revision: Mapped[str] = mapped_column(String(80))
+    configured_hash: Mapped[str] = mapped_column(String(64))
+
+
+class LoginSession(Base):
+    __tablename__ = 'login_sessions'
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)

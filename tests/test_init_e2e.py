@@ -4,6 +4,7 @@
 иначе тест пропускается. Проверяет главное: хеши, созданные init_db.py, принимаются настоящим main.py.
 """
 import importlib
+import json
 import os
 import re
 import sys
@@ -12,6 +13,7 @@ import unittest
 from datetime import timedelta
 from pathlib import Path
 from unittest import mock
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "app"
@@ -98,3 +100,65 @@ class SeededPlatformTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_revision_is_explicit_and_preserves_card_edits(tmp_path):
+    import task_files as tf
+    import init_db
+    from models import Challenge
+    from sqlalchemy.orm import Session
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'arena.db'}")
+    secret = "fixture-secret-used-only-for-regression"
+    flags, revision = init_db.resolve_flags({}, tmp_path)
+    assert init_db.seed_database(engine, secret, flags, revision) == (3, 0)
+    init_db.write_private(tmp_path / "task_flags.json", json.dumps({"revision": revision, "flags": flags}))
+    with Session(engine) as db, db.begin():
+        card = db.get(Challenge, 2)
+        card.title = "Renamed entirely by instructor"
+        card.points = 175
+    assert init_db.resolve_flags({}, tmp_path) == (flags, revision)
+    assert init_db.seed_database(engine, secret, flags, revision) == (0, 0)
+    changed = dict(flags, WEB02_FLAG="CTF{fixture_new_round}")
+    with pytest.raises(tf.ConfigError):
+        init_db.resolve_flags(changed, tmp_path)
+    new, revision = init_db.resolve_flags(dict(changed, FLAG_REVISION="round-two"), tmp_path)
+    assert init_db.seed_database(engine, secret, new, revision) == (0, 1)
+    assert init_db.seed_database(engine, secret, new, revision) == (0, 0)
+    with Session(engine) as db:
+        card = db.get(Challenge, 2)
+        assert (card.title, card.points) == ("Renamed entirely by instructor", 175)
+        assert card.flag_hash == tf.hash_flag(secret, changed["WEB02_FLAG"])
+    engine.dispose()
+
+
+def test_legacy_migration_needs_revision_and_retains_solves(tmp_path):
+    import task_files as tf
+    import init_db
+    from models import Base, BuiltinChallenge, Challenge, Solve, User
+    from sqlalchemy.orm import Session
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy.db'}")
+    secret = "fixture-legacy-secret"
+    old = tf.load_flags({})
+    new = tf.load_flags({})
+    Base.metadata.create_all(engine)
+    with Session(engine) as db, db.begin():
+        for index, item in enumerate(tf.CHALLENGES, 1):
+            db.add(Challenge(id=index, title=item["title"], category=item["category"],
+                             description=item["description"], points=item["points"],
+                             flag_hash=tf.hash_flag(secret, old[item["flag_env"]]),
+                             is_published=True, resource_url=item["resource_url"]))
+        db.add(User(id=1, username="legacy_player", password_hash="unused-test-hash"))
+        db.add(Solve(user_id=1, challenge_id=1))
+    with pytest.raises(tf.ConfigError):
+        init_db.seed_database(engine, secret, new)
+    with Session(engine) as db:
+        assert db.get(Challenge, 1).flag_hash == tf.hash_flag(secret, old["WEB01_FLAG"])
+        assert db.get(BuiltinChallenge, "WEB-01") is None
+    assert init_db.seed_database(engine, secret, new, "migrate-once") == (0, 3)
+    with Session(engine) as db:
+        assert db.get(BuiltinChallenge, "WEB-01").challenge_id == 1
+        assert db.get(Solve, (1, 1))
+        assert db.get(User, 1).username == "legacy_player"
+    engine.dispose()

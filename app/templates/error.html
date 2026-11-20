@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Ошибка {{ error_status }} · CYBERARENA{% endblock %}
+{% block page_title %}Ошибка {{ error_status }}{% endblock %}
+{% block content %}
+<div class="auth-shell">
+  <div class="notice bad" role="alert">{{ error }}</div>
+  <a href="/">На главную</a>
+</div>
+{% endblock %}

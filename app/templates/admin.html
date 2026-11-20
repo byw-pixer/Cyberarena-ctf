@@ -18,21 +18,23 @@
   <div class="admin-stat"><small>Последних попыток</small><strong>{{ attempts|length }}</strong></div>
 </div>
 
+{% if error %}<div class="notice bad" role="alert">{{ error }}</div>{% endif %}
 <div class="stack">
   <div class="panel">
     <div class="panel-title"><span>Новое задание</span></div>
+    {% set values = submitted if failed_action == '/admin/challenges' else {} %}
     <form class="admin-form" method="post" action="/admin/challenges">
       <input type="hidden" name="csrf_token" value="{{ csrf }}">
       <div class="form-grid">
-        <div class="form-control"><label for="new-title">Заголовок</label><input class="field" id="new-title" name="title" required maxlength="140"></div>
-        <div class="form-control"><label for="new-points">Баллы</label><input class="field" id="new-points" type="number" name="points" min="1" max="1000" value="100" required></div>
-        <div class="form-control"><label for="new-category">Категория</label><select class="field" id="new-category" name="category"><option value="Web">Web</option><option value="Crypto">Crypto</option></select></div>
-        <div class="form-control"><label for="new-difficulty">Сложность</label><select class="field" id="new-difficulty" name="difficulty"><option value="easy">easy</option><option value="medium">medium</option><option value="hard">hard</option></select></div>
+        <div class="form-control"><label for="new-title">Заголовок</label><input class="field" id="new-title" name="title" value="{{ values.get('title', '') }}" required maxlength="140"></div>
+        <div class="form-control"><label for="new-points">Баллы</label><input class="field" id="new-points" type="number" name="points" min="1" max="1000" value="{{ values.get('points', 100) }}" required></div>
+        <div class="form-control"><label for="new-category">Категория</label><select class="field" id="new-category" name="category"><option value="Web">Web</option><option value="Crypto"{% if values.get('category') == 'Crypto' %} selected{% endif %}>Crypto</option></select></div>
+        <div class="form-control"><label for="new-difficulty">Сложность</label><select class="field" id="new-difficulty" name="difficulty">{% for d in ['easy', 'medium', 'hard'] %}<option value="{{ d }}"{% if values.get('difficulty') == d %} selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
       </div>
-      <div class="form-control"><label for="new-description">Описание / условие</label><textarea class="field" id="new-description" name="description" required maxlength="10000"></textarea></div>
+      <div class="form-control"><label for="new-description">Описание / условие</label><textarea class="field" id="new-description" name="description" required maxlength="10000">{{ values.get('description', '') }}</textarea></div>
       <div class="form-grid">
         <div class="form-control"><label for="new-flag">Флаг</label><input class="field" id="new-flag" name="flag" placeholder="CTF{...}" required autocomplete="off"></div>
-        <div class="form-control"><label for="new-resource">Локальная ссылка / ресурс</label><input class="field" id="new-resource" name="resource_url" placeholder="/lab/" maxlength="300"></div>
+        <div class="form-control"><label for="new-resource">Локальная ссылка / ресурс</label><input class="field" id="new-resource" name="resource_url" value="{{ values.get('resource_url', '') }}" placeholder="/lab/" maxlength="300"></div>
       </div>
       <div class="auth-info" style="margin:0">Флаг хранится только в виде хеша и больше нигде не показывается. Новое задание создаётся скрытым: опубликуйте его в карточке ниже.</div>
       <div class="form-actions"><button class="btn btn-primary" type="submit">Добавить скрытое задание</button></div>
@@ -42,22 +44,37 @@
   {% for c in challenges %}
   <div class="panel">
     <div class="panel-title"><span>Задание №{{ c.id }} · {{ c.title }}</span><span class="pill{% if not c.is_published %} inactive{% endif %}">{% if c.is_published %}Опубликовано{% else %}Скрыто{% endif %}</span></div>
+    {% set edit_action = '/admin/challenges/' ~ c.id ~ '/edit' %}
+    {% set editing = failed_action == edit_action %}
+    {% set values = submitted if editing else {} %}
+    {% set builtin = c.id in builtin_ids|default([]) %}
     <form class="admin-form" action="/admin/challenges/{{ c.id }}/edit" method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf }}">
       <div class="form-grid">
-        <div class="form-control"><label for="t{{ c.id }}">Заголовок</label><input class="field" id="t{{ c.id }}" name="title" value="{{ c.title }}" required maxlength="140"></div>
-        <div class="form-control"><label for="p{{ c.id }}">Баллы</label><input class="field" id="p{{ c.id }}" type="number" name="points" value="{{ c.points }}" min="1" max="1000" required></div>
-        <div class="form-control"><label for="c{{ c.id }}">Категория</label><select class="field" id="c{{ c.id }}" name="category"><option value="Web"{% if c.category == 'Web' %} selected{% endif %}>Web</option><option value="Crypto"{% if c.category == 'Crypto' %} selected{% endif %}>Crypto</option></select></div>
-        <div class="form-control"><label for="d{{ c.id }}">Сложность</label><select class="field" id="d{{ c.id }}" name="difficulty">{% for d in ['easy', 'medium', 'hard'] %}<option value="{{ d }}"{% if c.difficulty == d %} selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
+        <div class="form-control"><label for="t{{ c.id }}">Заголовок</label><input class="field" id="t{{ c.id }}" name="title" value="{{ values.get('title', c.title) }}" required maxlength="140"></div>
+        <div class="form-control"><label for="p{{ c.id }}">Баллы</label><input class="field" id="p{{ c.id }}" type="number" name="points" value="{{ values.get('points', c.points) }}" min="1" max="1000" required></div>
+        <div class="form-control"><label for="c{{ c.id }}">Категория</label><select class="field" id="c{{ c.id }}" name="category"><option value="Web"{% if values.get('category', c.category) == 'Web' %} selected{% endif %}>Web</option><option value="Crypto"{% if values.get('category', c.category) == 'Crypto' %} selected{% endif %}>Crypto</option></select></div>
+        <div class="form-control"><label for="d{{ c.id }}">Сложность</label><select class="field" id="d{{ c.id }}" name="difficulty">{% for d in ['easy', 'medium', 'hard'] %}<option value="{{ d }}"{% if values.get('difficulty', c.difficulty) == d %} selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
       </div>
-      <div class="form-control"><label for="ds{{ c.id }}">Описание / условие</label><textarea class="field" id="ds{{ c.id }}" name="description" required maxlength="10000">{{ c.description }}</textarea></div>
+      <div class="form-control"><label for="ds{{ c.id }}">Описание / условие</label><textarea class="field" id="ds{{ c.id }}" name="description" required maxlength="10000">{{ values.get('description', c.description) }}</textarea></div>
       <div class="form-grid">
-        <div class="form-control"><label for="f{{ c.id }}">Новый флаг (пусто = без изменения)</label><input class="field" id="f{{ c.id }}" name="flag" placeholder="CTF{...}" autocomplete="off"></div>
-        <div class="form-control"><label for="r{{ c.id }}">Ресурс</label><input class="field" id="r{{ c.id }}" name="resource_url" value="{{ c.resource_url or '' }}" maxlength="300"></div>
+        {% if builtin %}<p class="hint">Флаг и материалы встроенного задания обновляются при развёртывании.</p>{% else %}
+        <div class="form-control"><label for="f{{ c.id }}">Новый флаг (пусто = без изменения)</label><input class="field" id="f{{ c.id }}" name="flag" placeholder="CTF{...}" autocomplete="off"></div>{% endif %}
+        <div class="form-control"><label for="r{{ c.id }}">Ресурс</label><input class="field" id="r{{ c.id }}" name="resource_url" value="{{ c.resource_url or '' if builtin else values.get('resource_url', c.resource_url or '') }}" maxlength="300"{% if builtin %} readonly{% endif %}></div>
       </div>
-      <label style="display:flex;gap:9px;align-items:center;font-size:12px;color:#a4b5c2"><input type="checkbox" name="is_published" value="true"{% if c.is_published %} checked{% endif %}> Опубликовано</label>
+      <label style="display:flex;gap:9px;align-items:center;font-size:12px;color:#a4b5c2"><input type="checkbox" name="is_published" value="true"{% if (values.get('is_published') == 'true' if editing else c.is_published) %} checked{% endif %}> Опубликовано</label>
       <div class="form-actions"><button class="btn btn-primary" type="submit">Сохранить</button></div>
     </form>
+    {% if not builtin and not c.is_published %}
+    <form class="admin-form" action="/admin/challenges/{{ c.id }}/delete" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <div class="form-control">
+        <label for="delete-{{ c.id }}">Введите DELETE, чтобы удалить это задание без истории</label>
+        <input class="field" id="delete-{{ c.id }}" name="confirmation" required autocomplete="off">
+      </div>
+      <div class="form-actions"><button class="btn" type="submit">Удалить задание</button></div>
+    </form>
+    {% endif %}
   </div>
   {% endfor %}
 
@@ -78,12 +95,30 @@
   </div>
 
   <div class="panel">
-    <div class="panel-title"><span>Сброс турнира</span></div>
+    <div class="panel-title"><span>Последние 100 решений</span></div>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>УЧАСТНИК</th><th>ЗАДАНИЕ</th><th>ВРЕМЯ (UTC)</th></tr></thead>
+        <tbody>
+          {% for solved_at, username, title in solves %}
+          <tr><td>{{ username }}</td><td>{{ title }}</td><td>{{ solved_at.strftime('%d.%m %H:%M:%S') }}</td></tr>
+          {% else %}
+          <tr><td colspan="3" class="empty-row">Пока нет решений.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if demo_reset %}
+  <div class="panel">
+    <div class="panel-title"><span>Сброс демонстрации</span></div>
     <form class="admin-form" method="post" action="/admin/reset">
       <input type="hidden" name="csrf_token" value="{{ csrf }}">
       <div class="form-control"><label for="reset-confirm">Введите RESET, чтобы удалить все решения и попытки</label><input class="field" id="reset-confirm" name="confirmation" required autocomplete="off"></div>
       <div class="form-actions"><button class="btn btn-danger" type="submit">Сбросить решения и попытки</button></div>
     </form>
   </div>
+  {% endif %}
 </div>
 {% endblock %}

@@ -1,37 +1,41 @@
-"""Резервная копия SQLite (консистентная, пока платформа работает).
-
-    docker compose exec app python backup.py
-    docker compose cp app:/data/backup.db ./backup.db
-
-Файл /data/backup.db перезаписывается при каждом запуске.
-"""
+"""Create and check a private SQLite snapshot while the application is running."""
+import argparse
 import os
 import sqlite3
-import sys
+import tempfile
+from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, help="Новый путь к файлу резервной копии")
+    args = parser.parse_args()
     url = os.environ.get("DATABASE_URL") or "sqlite:////data/cyberarena.db"
     prefix = "sqlite:///"
     if not url.startswith(prefix):
-        print("Поддерживается только SQLite", file=sys.stderr)
-        return 1
-    source_path = Path(url[len(prefix):])
-    target_path = source_path.with_name("backup.db")
-    if not source_path.is_file():
-        print("База данных не найдена: %s" % source_path, file=sys.stderr)
-        return 1
-    source = sqlite3.connect(source_path, timeout=20)
-    target = sqlite3.connect(target_path)
+        parser.error("Поддерживается только SQLite")
+    source_path = Path(url[len(prefix):]).resolve(strict=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    target_path = (args.output or source_path.with_name(f"backup-{stamp}.db")).resolve()
+    fd, name = tempfile.mkstemp(dir=target_path.parent, prefix=".sqlite-backup-")
+    os.close(fd)
+    temporary = Path(name)
     try:
-        source.backup(target)        # штатный механизм SQLite: корректен и при работающей платформе
+        with closing(sqlite3.connect(source_path.as_uri() + "?mode=ro", uri=True, timeout=20)) as source:
+            target = sqlite3.connect(temporary)
+            try:
+                source.backup(target)
+                if target.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
+                    raise RuntimeError("Проверка целостности резервной копии не прошла")
+            finally:
+                target.close()
+        os.link(temporary, target_path)
     finally:
-        target.close()
-        source.close()
-    print("Резервная копия: %s" % target_path)
-    return 0
+        temporary.unlink(missing_ok=True)
+    print(target_path)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

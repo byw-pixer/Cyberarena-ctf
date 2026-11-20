@@ -3,8 +3,8 @@
 # Сайт: http://localhost:8080
 #
 # Все значения ниже имеют безопасные значения по умолчанию. Чтобы задать свои, создайте файл .env
-# (пример: .env.example). Пароль администратора, если он не задан, создаётся случайным при первом
-# запуске и печатается в лог: docker compose logs app
+# (пример: .env.example). При первом запуске случайный пароль администратора
+# сохраняется в закрытом файле /data/admin-bootstrap внутри контейнера.
 
 name: cyberarena
 
@@ -18,19 +18,24 @@ services:
   # --- Единственная точка входа. Слушает только 127.0.0.1 ---
   nginx:
     image: nginx:1.27-alpine
+    user: "101:101"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     ports:
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:${CYBERARENA_PORT:-8080}:8080"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/compose.conf:/etc/nginx/nginx.conf:ro
     networks: [app-net, lab-net]
     depends_on:
       app:
         condition: service_healthy   # лабораторию НЕ ждём: платформа должна жить без неё
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/nginx-health"]
       interval: 10s
       timeout: 3s
       retries: 5
+    cpus: 0.25
+    pids_limit: 64
     mem_limit: 64m
     restart: unless-stopped
     logging: *default-logging
@@ -41,12 +46,17 @@ services:
     environment:
       DATABASE_URL: sqlite:////data/cyberarena.db
       ADMIN_USERNAME: "${ADMIN_USERNAME:-teacher}"
-      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"     # пусто = случайный пароль при первом запуске (в логе)
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"     # пусто = случайный пароль при первом запуске
       SECRET_KEY: "${SECRET_KEY:-}"             # пусто = случайный ключ, сохраняется в томе /data
-      WEB01_FLAG: "${WEB01_FLAG:-}"             # пусто = демонстрационный флаг
+      DEPLOYMENT_NAME: "${COMPOSE_PROJECT_NAME:-cyberarena}"
+      DEMO_RESET: "${DEMO_RESET:-false}"
+      FLAG_REVISION: "${FLAG_REVISION:-}"
+      LAB_FLAG_DIR: /lab-flags
+      WEB01_FLAG: "${WEB01_FLAG:-}"
       WEB02_FLAG: "${WEB02_FLAG:-}"
       CRYPTO01_FLAG: "${CRYPTO01_FLAG:-}"
     volumes:
+      - lab_flags:/lab-flags
       - db_data:/data               # база и ключ переживают restart и down (но не down -v)
     networks: [app-net]             # лаборатория сюда НЕ подключена
     expose: ["8000"]
@@ -56,6 +66,9 @@ services:
       timeout: 3s
       retries: 5
       start_period: 30s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
     mem_limit: 512m
     cpus: 1.0
     restart: unless-stopped
@@ -66,8 +79,8 @@ services:
     build: ./lab
     networks: [lab-net]             # только lab-net, а она internal (без интернета)
     expose: ["5000"]
-    environment:
-      WEB01_FLAG: "${WEB01_FLAG:-}" # единственная переменная лаборатории (пусто = демонстрационный флаг)
+    volumes:
+      - lab_flags:/lab-flags:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -93,3 +106,4 @@ networks:
 
 volumes:
   db_data: {}
+  lab_flags: {}

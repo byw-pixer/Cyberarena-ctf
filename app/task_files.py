@@ -1,21 +1,10 @@
-"""Учебные задания CyberArena: описания, демонстрационные флаги и генерация файлов.
-
-Модуль использует только стандартную библиотеку, поэтому его можно импортировать и тестировать
-без FastAPI и SQLAlchemy. Его вызывает init_db.py при каждом старте контейнера:
-
-  * WEB-01     уязвимое приложение в контейнере lab-web, флаг ему передаёт Docker Compose;
-  * WEB-02     страница с проверкой кода в браузере: файл vault.js создаётся из флага;
-  * CRYPTO-01  записка, зашифрованная шифром Виженера: файл cipher.txt создаётся из флага.
-
-Флаги берутся из переменных окружения WEB01_FLAG, WEB02_FLAG, CRYPTO01_FLAG (файл .env).
-Если переменная не задана, используется демонстрационное значение из DEFAULT_FLAGS.
-Перед настоящим турниром задайте свои флаги.
-"""
+"""Описания заданий и генерация материалов из флагов развёртывания."""
 import base64
 import hashlib
 import hmac
 import json
 import re
+import secrets
 import shutil
 from pathlib import Path
 
@@ -23,12 +12,7 @@ from pathlib import Path
 # Это подмножество формата, который принимает платформа (CTF{1..160 символов без скобок и переводов строк}).
 FLAG_RE = re.compile(r"^CTF\{[A-Za-z0-9_\-]{1,150}\}$")
 
-# Демонстрационные флаги. Значение WEB01_FLAG продублировано в lab/app.py (тест проверяет совпадение).
-DEFAULT_FLAGS = {
-    "WEB01_FLAG": "CTF{idor_open_door_42}",
-    "WEB02_FLAG": "CTF{view_source_is_not_a_crime}",
-    "CRYPTO01_FLAG": "CTF{vigenere_needs_a_better_key}",
-}
+FLAG_NAMES = ("WEB01_FLAG", "WEB02_FLAG", "CRYPTO01_FLAG")
 
 CRYPTO_KEY = "cyberarena"   # ключ шифра: название платформы (сказано в условии задания)
 PLAINTEXT = "Intercepted note. The secret you are looking for is {flag}"
@@ -110,16 +94,13 @@ class ConfigError(ValueError):
     """Ошибка настройки (понятное сообщение для оператора)."""
 
 
-def load_flags(environ):
-    """Флаги из окружения, а если переменная пуста или не задана, демонстрационные."""
+def load_flags(environ, previous=None):
     flags = {}
-    for name, default in DEFAULT_FLAGS.items():
-        value = (environ.get(name) or "").strip() or default
-        if not FLAG_RE.match(value):
-            raise ConfigError(
-                "%s имеет неверный формат. Нужно CTF{...}: только латинские буквы, цифры, «_» и «-» внутри скобок." % name
-            )
-        flags[name] = value
+    for name in FLAG_NAMES:
+        value = (environ.get(name) or "").strip()
+        if value and not FLAG_RE.fullmatch(value):
+            raise ConfigError(f"{name}: нужен флаг формата CTF с латиницей, цифрами, _ или - внутри скобок")
+        flags[name] = value or (previous or {}).get(name) or "CTF{" + secrets.token_hex(16) + "}"
     return flags
 
 

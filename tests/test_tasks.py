@@ -6,8 +6,8 @@
   - WEB-01: уязвимость IDOR работает как задумано, свои данные и главная флага не содержат,
     мусорные запросы не роняют сервер и не отдают файлы
   - WEB-02 и CRYPTO-01: флаг восстанавливается из выданных файлов, а в открытом виде его там нет
-  - демонстрационные флаги корректны, значения по умолчанию платформы и лаборатории совпадают
-  - публичные файлы репозитория не содержат демонстрационных флагов, папки teacher/ нет
+  - генерируемые флаги корректны, лаборатория читает предоставленный ей материал
+  - шаблоны и публичные файлы не содержат тестовых ответов
 """
 import base64
 import http.client
@@ -47,8 +47,11 @@ def decode_vault(vault_js_text):
 class Web01Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._old = os.environ.get("WEB01_FLAG")
-        os.environ["WEB01_FLAG"] = TEST_FLAGS["WEB01_FLAG"]
+        cls._old = os.environ.get("WEB01_FLAG_FILE")
+        cls.directory = tempfile.TemporaryDirectory()
+        flag_path = Path(cls.directory.name) / "web01.flag"
+        flag_path.write_text(TEST_FLAGS["WEB01_FLAG"])
+        os.environ["WEB01_FLAG_FILE"] = str(flag_path)
         cls.server = lab_app.make_server("127.0.0.1", 0)
         cls.port = cls.server.server_address[1]
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
@@ -58,9 +61,10 @@ class Web01Tests(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
         if cls._old is None:
-            os.environ.pop("WEB01_FLAG", None)
+            os.environ.pop("WEB01_FLAG_FILE", None)
         else:
-            os.environ["WEB01_FLAG"] = cls._old
+            os.environ["WEB01_FLAG_FILE"] = cls._old
+        cls.directory.cleanup()
 
     def get(self, path):
         try:
@@ -71,6 +75,13 @@ class Web01Tests(unittest.TestCase):
 
     def test_health(self):
         self.assertEqual(self.get("/health"), (200, "ok"))
+
+    def test_head_has_headers_without_a_body(self):
+        request = urllib.request.Request(f"http://127.0.0.1:{self.port}/", method="HEAD")
+        with urllib.request.urlopen(request, timeout=5) as response:
+            self.assertEqual(response.status, 200)
+            self.assertGreater(int(response.headers["Content-Length"]), 0)
+            self.assertEqual(response.read(), b"")
 
     def test_home_has_no_flag_and_uses_relative_links(self):
         status, body = self.get("/")
@@ -116,14 +127,16 @@ class Web01Tests(unittest.TestCase):
         self.assertNotIn(b"root:", resp.read())
         conn.close()
 
-    def test_default_flag_is_used_when_env_is_empty(self):
-        old = os.environ.pop("WEB01_FLAG", None)
-        try:
-            self.assertEqual(lab_app.get_flag(), lab_app.DEFAULT_FLAG)
-            os.environ["WEB01_FLAG"] = ""
-            self.assertEqual(lab_app.get_flag(), lab_app.DEFAULT_FLAG)
-        finally:
-            os.environ["WEB01_FLAG"] = old if old is not None else TEST_FLAGS["WEB01_FLAG"]
+    def test_missing_material_does_not_use_a_default_flag(self):
+        with tempfile.TemporaryDirectory() as directory:
+            previous = os.environ["WEB01_FLAG_FILE"]
+            os.environ["WEB01_FLAG_FILE"] = str(Path(directory) / "missing")
+            try:
+                self.assertEqual(self.get("/health")[0], 503)
+                with self.assertRaises(FileNotFoundError):
+                    lab_app.get_flag()
+            finally:
+                os.environ["WEB01_FLAG_FILE"] = previous
 
 
 class TaskFilesTests(unittest.TestCase):
@@ -165,42 +178,45 @@ class TaskFilesTests(unittest.TestCase):
 
 
 class FlagConfigTests(unittest.TestCase):
-    def test_defaults_used_when_env_empty(self):
-        self.assertEqual(tf.load_flags({}), tf.DEFAULT_FLAGS)
-        self.assertEqual(tf.load_flags({"WEB01_FLAG": "  ", "WEB02_FLAG": ""}), tf.DEFAULT_FLAGS)
+    def test_empty_environment_reuses_persisted_flags(self):
+        self.assertEqual(tf.load_flags({"WEB01_FLAG": "  "}, TEST_FLAGS), TEST_FLAGS)
+        self.assertNotEqual(tf.load_flags({}), tf.load_flags({}))
 
     def test_env_overrides_defaults(self):
-        flags = tf.load_flags({"WEB02_FLAG": "CTF{custom_flag}"})
+        flags = tf.load_flags({"WEB02_FLAG": "CTF{custom_flag}"}, TEST_FLAGS)
         self.assertEqual(flags["WEB02_FLAG"], "CTF{custom_flag}")
-        self.assertEqual(flags["WEB01_FLAG"], tf.DEFAULT_FLAGS["WEB01_FLAG"])
+        self.assertEqual(flags["WEB01_FLAG"], TEST_FLAGS["WEB01_FLAG"])
 
     def test_bad_format_is_rejected_with_flag_name(self):
         for bad in ("flag{x}", "CTF{}", "CTF{русский}", "CTF{a b}", "CTF{" + "a" * 200 + "}"):
             with self.assertRaisesRegex(tf.ConfigError, "WEB01_FLAG"):
                 tf.load_flags({"WEB01_FLAG": bad})
 
-    def test_default_flags_are_valid_and_distinct(self):
-        self.assertEqual(len(set(tf.DEFAULT_FLAGS.values())), 3)
-        for flag in tf.DEFAULT_FLAGS.values():
+    def test_generated_flags_are_valid_and_distinct(self):
+        flags = tf.load_flags({})
+        self.assertEqual(len(set(flags.values())), 3)
+        for flag in flags.values():
             self.assertRegex(flag, tf.FLAG_RE)
 
-    def test_lab_default_matches_platform_default(self):
-        """WEB-01: демонстрационный флаг лаборатории и платформы обязан совпадать, иначе задание не решить."""
-        lab_source = (ROOT / "lab" / "app.py").read_text(encoding="utf-8")
-        lab_default = re.search(r'^DEFAULT_FLAG = "([^"]+)"', lab_source, re.M).group(1)
-        self.assertEqual(lab_default, tf.DEFAULT_FLAGS["WEB01_FLAG"])
+    def test_lab_uses_only_the_material_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "web01.flag"
+            path.write_text(TEST_FLAGS["WEB01_FLAG"])
+            from unittest.mock import patch
+            with patch.dict(os.environ, {"WEB01_FLAG_FILE": str(path)}):
+                self.assertEqual(lab_app.get_flag(), TEST_FLAGS["WEB01_FLAG"])
 
 
 class RepositoryTests(unittest.TestCase):
     def test_default_flags_not_in_public_files(self):
         """Демонстрационные флаги не должны быть в документации, шаблонах и публичных данных."""
-        public = ["README.md", "compose.yaml", ".env.example", "nginx/nginx.conf",
+        public = ["README.md", "compose.yaml", ".env.example", "nginx/compose.conf", "nginx/nginx.conf",
                   "app/static/index.html", "app/static/style.css", "app/static/tasks/web02/index.html"]
         public += [str(p.relative_to(ROOT)) for p in (ROOT / "app" / "templates").glob("*")]
         public += [str(p.relative_to(ROOT)) for p in (ROOT / "docs").glob("*.md")]
         for rel in public:
             text = (ROOT / rel).read_text(encoding="utf-8", errors="ignore")
-            for name, flag in tf.DEFAULT_FLAGS.items():
+            for name, flag in TEST_FLAGS.items():
                 self.assertNotIn(flag, text, "флаг %s найден в %s" % (name, rel))
 
     def test_no_teacher_folder_or_references(self):

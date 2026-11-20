@@ -88,7 +88,7 @@ class ContractTests(unittest.TestCase):
                     self.assertFalse(names - allowed, "%s %s: лишние поля %s" % (tpl.name, target, names - allowed))
                     self.assertFalse(route["required"] - names, "%s %s: нет обязательных полей %s" % (tpl.name, target, route["required"] - names))
                 checked += 1
-        self.assertEqual(checked, 7)   # logout, вход/регистрация, смена пароля, флаг, 3 формы админки
+        self.assertEqual(checked, 8)   # logout, вход/регистрация, смена пароля, флаг, 4 формы админки
 
     def test_internal_links_lead_to_routes(self):
         for tpl in TEMPLATES:
@@ -213,7 +213,7 @@ class InitTests(unittest.TestCase):
         fn = next(n for n in MAIN_TREE.body if isinstance(n, ast.FunctionDef) and n.name == "hash_flag")
         ns = {"hashlib": hashlib, "hmac": hmac, "SECRET_KEY": self.SECRET}
         exec(compile(ast.Module([fn], []), "main.py", "exec"), ns)
-        for flag in ("CTF{abc}", "CTF{идор}", tf.DEFAULT_FLAGS["WEB01_FLAG"]):
+        for flag in ("CTF{abc}", "CTF{идор}", TEST_FLAGS["WEB01_FLAG"]):
             self.assertEqual(ns["hash_flag"](flag), tf.hash_flag(self.SECRET, flag))
 
     def test_seed_columns_exist_in_backend_model(self):
@@ -291,6 +291,8 @@ except ImportError:      # pragma: no cover
     HAVE_SQLALCHEMY = False
 
 
+TEST_FLAGS = {name: "CTF{fixture_" + name + "}" for name in tf.FLAG_NAMES}
+
 @unittest.skipUnless(HAVE_SQLALCHEMY, "SQLAlchemy не установлен (pip install -r app/requirements.txt)")
 class SeedDatabaseTests(unittest.TestCase):
     SECRET = "x" * 40
@@ -309,22 +311,25 @@ class SeedDatabaseTests(unittest.TestCase):
     def test_empty_database_gets_three_published_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:
             engine = self.engine(tmp)
-            self.assertEqual(init_db.seed_database(engine, self.SECRET, tf.DEFAULT_FLAGS), (3, 0))
+            self.assertEqual(init_db.seed_database(engine, self.SECRET, TEST_FLAGS), (3, 0))
             rows = self.rows(engine)
             self.assertEqual([r.title.split()[0] for r in rows], ["WEB-01", "WEB-02", "CRYPTO-01"])
             self.assertTrue(all(r.is_published for r in rows))
-            self.assertEqual(rows[0].flag_hash, tf.hash_flag(self.SECRET, tf.DEFAULT_FLAGS["WEB01_FLAG"]))
+            self.assertEqual(rows[0].flag_hash, tf.hash_flag(self.SECRET, TEST_FLAGS["WEB01_FLAG"]))
             self.assertNotIn("CTF{", " ".join(r.flag_hash + r.description for r in rows))
             engine.dispose()
 
-    def test_second_start_changes_nothing_and_flag_change_is_applied(self):
+    def test_second_start_changes_nothing_and_requires_explicit_flag_revision(self):
         with tempfile.TemporaryDirectory() as tmp:
             engine = self.engine(tmp)
-            init_db.seed_database(engine, self.SECRET, tf.DEFAULT_FLAGS)
-            self.assertEqual(init_db.seed_database(engine, self.SECRET, tf.DEFAULT_FLAGS), (0, 0))
+            init_db.seed_database(engine, self.SECRET, TEST_FLAGS)
+            self.assertEqual(init_db.seed_database(engine, self.SECRET, TEST_FLAGS), (0, 0))
             self.assertEqual(len(self.rows(engine)), 3)
-            changed = dict(tf.DEFAULT_FLAGS, WEB01_FLAG="CTF{new_tournament_flag}")
-            self.assertEqual(init_db.seed_database(engine, self.SECRET, changed), (0, 1))
+            changed = dict(TEST_FLAGS, WEB01_FLAG="CTF{new_tournament_flag}")
+            with self.assertRaises(tf.ConfigError):
+                init_db.seed_database(engine, self.SECRET, changed)
+            self.assertEqual(init_db.seed_database(engine, self.SECRET, changed, "round-2"), (0, 1))
+            self.assertEqual(init_db.seed_database(engine, self.SECRET, changed, "round-2"), (0, 0))
             self.assertEqual(self.rows(engine)[0].flag_hash, tf.hash_flag(self.SECRET, "CTF{new_tournament_flag}"))
             engine.dispose()
 
@@ -332,12 +337,12 @@ class SeedDatabaseTests(unittest.TestCase):
         from sqlalchemy.orm import Session
         with tempfile.TemporaryDirectory() as tmp:
             engine = self.engine(tmp)
-            init_db.seed_database(engine, self.SECRET, tf.DEFAULT_FLAGS)
+            init_db.seed_database(engine, self.SECRET, TEST_FLAGS)
             with Session(engine) as db:
                 row = self.rows(engine)[1]
                 db.get(type(row), row.id).title = "Моё задание"
                 db.commit()
-            self.assertEqual(init_db.seed_database(engine, self.SECRET, tf.DEFAULT_FLAGS), (0, 0))
+            self.assertEqual(init_db.seed_database(engine, self.SECRET, TEST_FLAGS), (0, 0))
             self.assertEqual(len(self.rows(engine)), 3)       # дубликат WEB-02 не создан
             engine.dispose()
 
@@ -353,22 +358,23 @@ class ConfigTests(unittest.TestCase):
         self.assertNotIn("env_file", app)
         for line in app["environment"].values():
             self.assertNotRegex(str(line), r"\$\{[A-Z0-9_]+:\?")        # ни одной обязательной переменной
-        self.assertEqual(list(lab["environment"]), ["WEB01_FLAG"])        # лаборатория знает только свой флаг
+        self.assertNotIn("environment", lab)
         self.assertIs(lab["read_only"], True)
         self.assertEqual(lab["cap_drop"], ["ALL"])
         self.assertIn("no-new-privileges:true", lab["security_opt"])
         self.assertEqual(lab["mem_limit"], "256m")
         self.assertEqual(lab["networks"], ["lab-net"])
         self.assertIs(compose["networks"]["lab-net"]["internal"], True)
-        self.assertNotIn("volumes", lab)                                  # нет доступа к тому с базой
+        self.assertEqual(lab["volumes"], ["lab_flags:/lab-flags:ro"])
         for key in ("privileged", "network_mode", "ports"):
             self.assertNotIn(key, lab)
-        self.assertEqual(nginx["ports"], ["127.0.0.1:8080:80"])
+        self.assertEqual(nginx["ports"], ["127.0.0.1:${CYBERARENA_PORT:-8080}:8080"])
+        self.assertIn("./nginx/compose.conf:/etc/nginx/nginx.conf:ro", nginx["volumes"])
         for service in (app, lab, nginx):
             self.assertIn("healthcheck", service)
 
     def test_nginx_proxies_lab_with_503_page_and_limits(self):
-        conf = (ROOT / "nginx" / "nginx.conf").read_text(encoding="utf-8")
+        conf = (ROOT / "nginx" / "compose.conf").read_text(encoding="utf-8")
         self.assertEqual(conf.count("{"), conf.count("}"))
         for needle in ("location /lab/", "error_page 502 503 504 = @lab_down", "return 503",
                        "limit_req_zone", "limit_req_status 429", "POST:/(login|register)", "/challenges/[0-9]+/submit"):
@@ -381,7 +387,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_text_files_use_lf_and_gitattributes_forces_it(self):
         """Git на Windows подставляет CRLF и ломает конфиги: нужны LF и .gitattributes."""
-        for path in (ROOT / "nginx" / "nginx.conf", ROOT / "compose.yaml", APP / "Dockerfile", APP / "init_db.py"):
+        for path in (ROOT / "nginx" / "compose.conf", ROOT / "compose.yaml", APP / "Dockerfile", APP / "init_db.py"):
             self.assertNotIn(b"\r\n", path.read_bytes(), "%s содержит CRLF" % path.name)
         attrs = (ROOT / ".gitattributes").read_text(encoding="utf-8")
         self.assertIn("*.py text eol=lf", attrs)
